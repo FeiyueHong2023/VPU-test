@@ -1,0 +1,253 @@
+cur_dir := $(dir $(lastword $(MAKEFILE_LIST)))
+
+obj-y := $(patsubst $(cur_dir)%,%,$(wildcard $(cur_dir)*.c))
+obj-y := $(obj-y:.c=.o)
+
+ifeq ($(RC48M_ENABLE),1)
+ifneq ($(FLASH_LOW_SPEED),1)
+$(error "RC48M_ENABLE requires FLASH_LOW_SPEED=1 (flash cannot use X4 or PLL)")
+endif
+ifneq ($(ULTRA_LOW_POWER),1)
+$(error "RC48M_ENABLE requires ULTRA_LOW_POWER=1 (PLL/X4 on or off with sysfreq change)")
+endif
+endif
+
+ifneq ($(BTH2SENS_CHAN_REC_CNT),)
+CFLAGS_hal_bth2sens.o += -DBTH2SENS_CHAN_REC_CNT=$(BTH2SENS_CHAN_REC_CNT)
+endif
+
+ifeq ($(SENSOR_ENGINE_DEBUG),1)
+CFLAGS_hal_sensor_eng_$(CHIP).o += -DSENSOR_ENGINE_DEBUG
+endif
+
+ifneq ($(SYS2SENS_CHAN_REC_CNT),)
+CFLAGS_hal_sys2sens.o += -DSYS2SENS_CHAN_REC_CNT=$(SYS2SENS_CHAN_REC_CNT)
+endif
+
+ifeq ($(USB_CLK_SRC_PLL),1)
+CMU_CFG_FLAGS += -DUSB_CLK_SRC_PLL
+endif
+
+ifeq ($(EMMC_USE_BBPLL),1)
+CMU_CFG_FLAGS += -DEMMC_USE_BBPLL
+endif
+ifeq ($(EMMC_USE_USBPLL),1)
+CMU_CFG_FLAGS += -DEMMC_USE_USBPLL
+endif
+ifeq ($(EMMC_USE_DSIPLL),1)
+CMU_CFG_FLAGS += -DEMMC_USE_DSIPLL
+endif
+
+ifeq ($(MEM_USE_BBPLL),1)
+CMU_CFG_FLAGS += -DMEM_USE_BBPLL
+endif
+
+ifeq ($(AUDIO_USE_BBPLL),1)
+CMU_CFG_FLAGS += -DAUDIO_USE_BBPLL
+endif
+ifeq ($(AUDIO_USE_USBPLL),1)
+CMU_CFG_FLAGS += -DAUDIO_USE_USBPLL
+endif
+
+ifeq ($(SYS_USE_USBPLL),1)
+CMU_CFG_FLAGS += -DSYS_USE_USBPLL
+endif
+ifeq ($(SYS_USE_BBPLL),1)
+CMU_CFG_FLAGS += -DSYS_USE_BBPLL
+endif
+ifeq ($(SYS_USE_DSIPLL),1)
+CMU_CFG_FLAGS += -DSYS_USE_DSIPLL
+endif
+
+ifeq ($(FREQ_78M_USE_PLL),1)
+CMU_CFG_FLAGS += -DFREQ_78M_USE_PLL
+endif
+
+ifneq ($(BBPLL_MHZ),)
+CMU_CFG_FLAGS += -DBBPLL_MHZ=$(BBPLL_MHZ)
+endif
+
+ifeq ($(RESAMPLE_CODEC_CLK_ANA),1)
+CMU_CFG_FLAGS += -DRESAMPLE_CODEC_CLK_ANA
+endif
+
+ifeq ($(MCU_I2C_SLAVE),1)
+CMU_CFG_FLAGS += -DMCU_I2C_SLAVE
+PSC_CFG_FLAGS += -DMCU_I2C_SLAVE
+endif
+
+ifeq ($(MCU_SPI_SLAVE),1)
+CMU_CFG_FLAGS += -DMCU_SPI_SLAVE
+IOMUX_CFG_FLAGS += -DMCU_SPI_SLAVE
+endif
+
+ifeq ($(BTH_CODEC_I2C_SLAVE),1)
+CMU_CFG_FLAGS += -DBTH_CODEC_I2C_SLAVE
+PSC_CFG_FLAGS += -DBTH_CODEC_I2C_SLAVE
+endif
+
+ifeq ($(BT_LOG_POWEROFF),1)
+CMU_CFG_FLAGS += -DBT_LOG_POWEROFF
+endif
+
+ifeq ($(NO_RAM_CEN_MASK),1)
+CMU_CFG_FLAGS += -DNO_RAM_CEN_MASK
+endif
+
+ifeq ($(SENS_RAM_ECC),1)
+CMU_CFG_FLAGS += -DSENS_RAM_ECC
+endif
+
+ifeq ($(SLOW_SYS_BYPASS),1)
+CMU_CFG_FLAGS += -DSLOW_SYS_BYPASS
+endif
+
+ifeq ($(filter-out 0,$(OTA_CODE_OFFSET)),)
+# First image in flash
+SWITCH_MAIN_MCU ?= 1
+endif
+ifneq ($(filter-out 0,$(OTA_BOOT_SIZE)),)
+ifeq ($(filter-out 0,$(OTA_BOOT_OFFSET)),)
+# First OTA bootloader in flash
+SWITCH_MAIN_MCU ?= 1
+endif
+endif
+ifeq ($(SWITCH_MAIN_MCU),1)
+CMU_CFG_FLAGS += -DSWITCH_MAIN_MCU
+endif
+
+ifeq ($(JUMP_TO_ALT_FLASH),1)
+CMU_CFG_FLAGS += -DJUMP_TO_ALT_FLASH
+endif
+
+ifeq ($(FORCE_FLASH1_SLEEP),1)
+CMU_CFG_FLAGS += -DFORCE_FLASH1_SLEEP
+PSC_CFG_FLAGS += -DFORCE_FLASH1_SLEEP
+endif
+
+ifeq ($(RC48M_ENABLE),1)
+CMU_CFG_FLAGS += -DRC48M_ENABLE
+endif
+
+ifeq ($(BT_RCOSC_CAL),1)
+CMU_CFG_FLAGS += -DBT_RCOSC_CAL
+endif
+
+ifneq ($(CHIP_DMA_CFG_IDX),)
+CMU_CFG_FLAGS += -DCHIP_DMA_CFG_IDX=$(CHIP_DMA_CFG_IDX)
+endif
+
+ifeq ($(PMU_LOW_POWER_CLOCK),1)
+CMU_CFG_FLAGS += -DPMU_LOW_POWER_CLOCK
+endif
+
+ifeq ($(DAC_CLASSG_ENABLE),1)
+CODEC_CFG_FLAGS += -DDAC_CLASSG_ENABLE
+endif
+
+ifeq ($(AUDIO_ANC_LOW_DELAY),1)
+CODEC_CFG_FLAGS += -DAUDIO_ANC_LOW_DELAY
+endif
+
+ifeq ($(CODEC_ADC2_DUMP_DATA), 1)
+CODEC_ADC2_DSF ?= 1
+CODEC_CFG_FLAGS += -DCODEC_ADC2_DUMP_DATA
+endif
+
+ifeq ($(CODEC_ADC1_DSF), 1)
+CODEC_CFG_FLAGS += -DCODEC_ADC1_DSF
+endif
+
+ifeq ($(CODEC_ADC2_DSF), 1)
+CODEC_CFG_FLAGS += -DCODEC_ADC2_DSF
+endif
+
+ifeq ($(CODEC_DAC1_USF), 1)
+CODEC_CFG_FLAGS += -DCODEC_DAC1_USF
+endif
+
+ifeq ($(CODEC_DAC2_USF), 1)
+CODEC_CFG_FLAGS += -DCODEC_DAC2_USF
+endif
+
+ifeq ($(CODEC_DAC3_USF), 1)
+CODEC_CFG_FLAGS += -DCODEC_DAC3_USF
+endif
+
+ifeq ($(DAC_DRE_ENABLE),1)
+CODEC_CFG_FLAGS += -DDAC_DRE_ENABLE
+endif
+
+ifeq ($(AUDIO_OUTPUT_DAC2_MIX_BEFORE_ANC),1)
+CODEC_CFG_FLAGS += -DAUDIO_OUTPUT_DAC2_MIX_BEFORE_ANC
+endif
+
+ifeq ($(AUDIO_OUTPUT_DAC3_MIX_BEFORE_ANC),1)
+CODEC_CFG_FLAGS += -DAUDIO_OUTPUT_DAC3_MIX_BEFORE_ANC
+endif
+
+ifeq ($(AUDIO_ANA_DC_CALIB_USE_COMP_1603),1)
+CODEC_CFG_FLAGS += -DAUDIO_ANA_DC_CALIB_USE_COMP_1603
+endif
+
+ifeq ($(DIG_MIC_DYN_CODEC_VOLT),1)
+CODEC_CFG_FLAGS += -DDIG_MIC_DYN_CODEC_VOLT
+endif
+
+ifeq ($(ANC_DYN_CODEC_VOLT),1)
+CODEC_CFG_FLAGS += -DANC_DYN_CODEC_VOLT
+endif
+
+ifeq ($(TDM_RELAY),1)
+CODEC_CFG_FLAGS += -DTDM_RELAY
+endif
+
+ifeq ($(JTAG_BTH),1)
+PSC_CFG_FLAGS += -DJTAG_BTH
+endif
+
+ifeq ($(JTAG_BT),1)
+PSC_CFG_FLAGS += -DJTAG_BT
+endif
+
+ifeq ($(JTAG_SENS),1)
+PSC_CFG_FLAGS += -DJTAG_SENS
+endif
+
+ifeq ($(JTAG_M55),1)
+PSC_CFG_FLAGS += -DJTAG_M55
+endif
+
+ifeq ($(JTAG_DSP),1)
+PSC_CFG_FLAGS += -DJTAG_DSP
+endif
+
+ifeq ($(JTAG_ENABLE),1)
+IOMUX_CFG_FLAGS += -DJTAG_ENABLE
+endif
+
+ifeq ($(JTAG_TDI_TDO_PIN),1)
+IOMUX_CFG_FLAGS += -DJTAG_TDI_TDO_PIN
+endif
+
+ifeq ($(JTAG_RESET_PIN),1)
+IOMUX_CFG_FLAGS += -DJTAG_RESET_PIN
+endif
+
+ifeq ($(IOMUX_LOCK_ENABLE),1)
+IOMUX_CFG_FLAGS += -DIOMUX_LOCK_ENABLE
+endif
+
+CFLAGS_hal_analogif_$(CHIP).o += $(ANAIF_CFG_FLAGS)
+
+CFLAGS_hal_cmu_$(CHIP).o += $(CMU_CFG_FLAGS)
+CFLAGS_hal_senscmu_$(CHIP).o += $(CMU_CFG_FLAGS)
+CFLAGS_hal_bthcmu_$(CHIP).o += $(CMU_CFG_FLAGS)
+CFLAGS_hal_maincmu_$(CHIP).o += $(CMU_CFG_FLAGS)
+
+CFLAGS_hal_psc_$(CHIP).o += $(PSC_CFG_FLAGS)
+
+CFLAGS_hal_codec_$(CHIP).o += $(CODEC_CFG_FLAGS)
+
+CFLAGS_hal_iomux_$(CHIP).o += $(IOMUX_CFG_FLAGS)
+

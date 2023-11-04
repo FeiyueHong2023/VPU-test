@@ -1,0 +1,262 @@
+cur_dir := $(dir $(lastword $(MAKEFILE_LIST)))
+
+obj-y := $(patsubst $(cur_dir)%,%,$(wildcard $(cur_dir)*.c $(cur_dir)*.S))
+
+ifeq ($(CHIP_SUBSYS),sensor_hub)
+obj-y := $(filter analog_sens_$(CHIP).c, $(obj-y))
+else
+obj-y := $(filter-out analog_sens_$(CHIP).c, $(obj-y))
+endif
+
+obj-y := $(obj-y:.c=.o)
+obj-y := $(obj-y:.S=.o)
+
+ifeq ($(PMU_VMEM_PWR_SUPPLY_IO),1)
+# BUCK3 power supply rf_pa codec flash
+# LDO_MEM power supply gpio
+PMU_CFG_FLAGS += -DPMU_VMEM_PWR_SUPPLY_IO
+VMEM_VOLT ?= 1.7V
+ifneq ($(filter-out 1.6V 1.7V 1.8V 1.9V,$(VMEM_VOLT)),)
+$(error Invalid VMEM_VOLT=$(VMEM_VOLT))
+endif
+ifneq ($(VMEM_VOLT),)
+PMU_CFG_FLAGS += -DVMEM_VOLT=$(subst V,,$(VMEM_VOLT))
+endif
+endif
+
+ifeq ($(PSRAM_ENABLE),1)
+# 2700BP package requires 1.8V PSRAM power supply
+VCODEC_VOLT ?= 1.8V
+else ifeq ($(CODEC_HIGH_QUALITY),1)
+VCODEC_VOLT ?= 1.7V
+else
+VCODEC_VOLT ?= 1.7V
+endif
+
+ifneq ($(filter-out 1.35V 1.4V 1.45V 1.5V 1.55V 1.6V 1.65V 1.7V 1.75V 1.8V 1.9V 1.95V,$(VCODEC_VOLT)),)
+$(error Invalid VCODEC_VOLT=$(VCODEC_VOLT))
+endif
+ifneq ($(VCODEC_VOLT),)
+ANA_CFG_FLAGS += -DVCODEC_VOLT=$(subst V,,$(VCODEC_VOLT))
+PMU_CFG_FLAGS += -DVCODEC_VOLT=$(subst V,,$(VCODEC_VOLT))
+ifneq ($(filter 1.35V 1.4V 1.45V 1.5V 1.55V 1.6V 1.65V 1.7V 1.75V 1.8V 1.9V 1.95V,$(VCODEC_VOLT)),)
+VCODEC_OFF ?= 1
+ifeq ($(VHPPA_VOLT),)
+VHPPA_VOLT := $(VCODEC_VOLT)
+endif
+ifneq ($(VCODEC_VOLT),$(VHPPA_VOLT))
+$(error Incompatible VCODEC_VOLT=$(VCODEC_VOLT) with VHPPA_VOLT=$(VHPPA_VOLT))
+endif
+endif
+endif
+
+ifeq ($(VCODEC_OFF),1)
+PMU_CFG_FLAGS += -DVCODEC_OFF
+endif
+
+ifeq ($(VHPPA2VCODEC),1)
+PMU_CFG_FLAGS += -DVHPPA2VCODEC
+endif
+
+ifeq ($(HPPA_LDO_ON),1)
+PMU_CFG_FLAGS += -DHPPA_LDO_ON
+endif
+
+VHPPA_VOLT ?= 1.8V
+ifneq ($(filter-out 1.35V 1.4V 1.45V 1.5V 1.55V 1.6V 1.65V 1.7V 1.75V 1.8V 1.9V 1.95V,$(VHPPA_VOLT)),)
+$(error Invalid VHPPA_VOLT=$(VHPPA_VOLT))
+endif
+ifneq ($(VHPPA_VOLT),)
+PMU_CFG_FLAGS += -DVHPPA_VOLT=$(subst V,,$(VHPPA_VOLT))
+endif
+
+HIGH_VCORE ?= 0
+ifeq ($(HIGH_VCORE),1)
+PMU_CFG_FLAGS += -DHIGH_VCORE
+endif
+
+ifeq ($(SPLIT_CORE_M_CORE_L),1)
+PMU_CFG_FLAGS += -DSPLIT_CORE_M_CORE_L
+endif
+
+ifneq ($(filter-out 0,$(OTA_BOOT_SIZE)),)
+PMU_CFG_FLAGS += -DOTA_BOOT_IMAGE
+endif
+
+ifeq ($(SPLIT_VMEM_VMEM2),1)
+PMU_CFG_FLAGS += -DSPLIT_VMEM_VMEM2
+ANA_CFG_FLAGS += -DSPLIT_VMEM_VMEM2
+endif
+
+ifneq ($(EFUSE_BLOCK_NUM),)
+PMU_CFG_FLAGS += -DEFUSE_BLOCK_NUM=$(EFUSE_BLOCK_NUM)
+endif
+
+ifeq ($(LBRT),1)
+VANA_VOLT ?= 1.4V
+else
+VANA_VOLT ?= 1.05V
+endif
+ifneq ($(filter-out 1.05V 1.1V 1.2V 1.3V 1.35V 1.4V 1.5V 1.6V,$(VANA_VOLT)),)
+$(error Invalid VANA_VOLT=$(VANA_VOLT))
+endif
+ifneq ($(VANA_VOLT),)
+VANA_STEM := $(subst .,P,$(VANA_VOLT))
+PMU_CFG_FLAGS += -DVANA_$(VANA_STEM)
+endif
+
+ifneq ($(MTEST_LOGIC_VCORE),)
+VCORE_STEM :=$(subst .,_,$(MTEST_LOGIC_VCORE))
+PMU_CFG_FLAGS += -DMTEST_LOGIC_VCORE=PMU_ITN_VDIG_$(VCORE_STEM)
+endif
+
+LOW_POWER_ADC ?= 1
+ifeq ($(LOW_POWER_ADC),1)
+ANA_CFG_FLAGS += -DLOW_POWER_ADC
+endif
+
+ifeq ($(DAC_DRE_GAIN_DC_UPDATE),1)
+ANA_CFG_FLAGS += -DDAC_DRE_GAIN_DC_UPDATE
+endif
+
+ifeq ($(CLASSD_PA_ENABLE),1)
+ANA_CFG_FLAGS += -DCLASSD_PA_ENABLE
+endif
+
+ifeq ($(RC48M_ENABLE),1)
+ANA_CFG_FLAGS += -DRC48M_ENABLE
+ifeq ($(SYS_USE_RC48M),1)
+RC_CFG_FLAGS += -DSYS_USE_RC48M
+endif
+ifeq ($(BTH_USE_RC48M),1)
+RC_CFG_FLAGS += -DBTH_USE_RC48M
+endif
+ifeq ($(SENS_USE_RC48M),1)
+RC_CFG_FLAGS += -DSENS_USE_RC48M
+endif
+endif
+
+ifeq ($(AUDIO_USE_BBPLL),1)
+ANA_CFG_FLAGS += -DAUDIO_USE_BBPLL
+PMU_CFG_FLAGS += -DAUDIO_USE_BBPLL
+endif
+
+ifeq ($(USB_USE_USBPLL),1)
+PMU_CFG_FLAGS += -DUSB_USE_USBPLL
+USBPHY_CFG_FLAGS += -DUSB_USE_USBPLL
+endif
+
+ifeq ($(NO_EXT_PMU),1)
+ANA_CFG_FLAGS += -DNO_EXT_PMU
+PMU_CFG_FLAGS += -DNO_EXT_PMU
+endif
+
+ifeq ($(DAC_DRE_ENABLE),1)
+ANA_CFG_FLAGS += -DDAC_DRE_ENABLE
+endif
+
+ifeq ($(PMU_FORCE_LP_MODE),1)
+PMU_CFG_FLAGS += -DPMU_FORCE_LP_MODE
+endif
+ifeq ($(PMU_DCDC_ULP_MODE),1)
+PMU_CFG_FLAGS += -DPMU_DCDC_ULP_MODE
+endif
+
+ifeq ($(ITN_PMU_FORCE_LP_MODE),1)
+PMU_CFG_FLAGS += -DITN_PMU_FORCE_LP_MODE
+endif
+
+ifeq ($(DCDC_HIGH_EFFICIENCY),1)
+PMU_CFG_FLAGS += -DDCDC_HIGH_EFFICIENCY
+endif
+
+ifeq ($(FORCE_BIG_BANDGAP),1)
+PMU_CFG_FLAGS += -DFORCE_BIG_BANDGAP
+endif
+
+ifneq ($(BBPLL_MHZ),)
+PMU_CFG_FLAGS += -DBBPLL_MHZ=$(BBPLL_MHZ)
+endif
+
+ifeq ($(SYS_USE_USBPLL),1)
+PMU_CFG_FLAGS += -DSYS_USE_USBPLL
+endif
+
+IBRT_DUAL_ANT_CTRL ?= 0
+ifeq ($(IBRT_DUAL_ANT_CTRL),1)
+PMU_CFG_FLAGS += -DIBRT_DUAL_ANT_CTRL
+endif
+
+ifeq ($(NO_METAL_ID_1),1)
+PMU_CFG_FLAGS += -DNO_METAL_ID_1
+endif
+
+ifeq ($(CHECK_METAL_ID_BY_PMU_TYPE),1)
+PMU_CFG_FLAGS += -DCHECK_METAL_ID_BY_PMU_TYPE
+endif
+
+ifeq ($(BT_RCOSC_CAL),1)
+XTAL_CFG_FLAGS += -DBT_RCOSC_CAL
+endif
+
+ifeq ($(CPU_PD_SUBSYS_PU),1)
+PMU_CFG_FLAGS += -DCPU_PD_SUBSYS_PU
+endif
+
+ifeq ($(PSRAM_SLEEP_RET),1)
+PMU_CFG_FLAGS += -DPSRAM_SLEEP_RET
+endif
+
+DCDC_VOLT_HW_RAMP_ONLY ?= 1
+ifeq ($(DCDC_VOLT_HW_RAMP_ONLY),1)
+PMU_CFG_FLAGS += -DDCDC_VOLT_HW_RAMP_ONLY
+endif
+
+ifeq ($(PMU_RELAX_BURST_THRESHOLD),1)
+PMU_CFG_FLAGS += -DPMU_RELAX_BURST_THRESHOLD
+endif
+
+ifeq ($(PMU_POWER_PROTECT_DYNAMIC_CONFIG),1)
+PMU_CFG_FLAGS += -DPMU_POWER_PROTECT_DYNAMIC_CONFIG
+endif
+
+ifeq ($(PMU_LOW_POWER_CLOCK),1)
+PMU_CFG_FLAGS += -DPMU_LOW_POWER_CLOCK
+ANA_CFG_FLAGS += -DPMU_LOW_POWER_CLOCK
+endif
+
+ifeq ($(CHIP_HAS_LCDC),1)
+XTAL_CFG_FLAGS += -DUSE_DSI_PLL
+PMU_CFG_FLAGS += -DUSE_DSI_PLL
+endif
+ifeq ($(USB_HIGH_SPEED),1)
+XTAL_CFG_FLAGS += -DUSB_HIGH_SPEED
+endif
+
+ifeq ($(EMMC_DDR_MODE),1)
+EMMC_PHY_CFG_FLAGS += -DEMMC_DDR_MODE
+endif
+
+ifeq ($(EMMC_USE_BBPLL),1)
+EMMC_PHY_CFG_FLAGS += -DEMMC_USE_BBPLL
+endif
+
+ifeq ($(EMMC_DEBUG),1)
+EMMC_PHY_CFG_FLAGS += -DEMMC_DEBUG
+endif
+
+CFLAGS_pmu_$(CHIP).o += $(PMU_CFG_FLAGS)
+CFLAGS_pmu_itn_$(CHIP).o += $(PMU_CFG_FLAGS)
+CFLAGS_pmu_1802_$(CHIP).o += $(PMU_CFG_FLAGS)
+
+CFLAGS_analog_$(CHIP).o += $(ANA_CFG_FLAGS)
+CFLAGS_analog_sens_$(CHIP).o += $(ANA_CFG_FLAGS)
+CFLAGS_analog1809_$(CHIP).o += $(ANA_CFG_FLAGS)
+
+CFLAGS_rc_$(CHIP).o += $(RC_CFG_FLAGS)
+
+CFLAGS_usbphy_$(CHIP).o += $(USBPHY_CFG_FLAGS)
+
+CFLAGS_xtal_$(CHIP).o += $(XTAL_CFG_FLAGS)
+
+CFLAGS_emmcphy_$(CHIP).o += $(EMMC_PHY_CFG_FLAGS)
